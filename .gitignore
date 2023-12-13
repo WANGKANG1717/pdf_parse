@@ -1,0 +1,6 @@
+out
+imgs
+.vscode
+__pycache__
+images
+tmp.*
