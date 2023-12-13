@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-# @Date     : 2023-12-13 16:24:53
+# @Date     : 2023-12-11 18:28:43
 # @Author   : WangKang
 # @Blog     : kang17.xyz
 # @Email    : 1686617586@qq.com
 # @Filepath : main.py
-# @Brief    : 通用性更好的txt解析器
+# @Brief    : 解析txt文件
 # Copyright 2023 WANGKANG, All Rights Reserved.
 import os
 import re
@@ -13,21 +13,10 @@ import sys
 
 
 class ParseText:
-    MATCH_PAGE_HEADER: list | str = None
-    MATCH_PARSE_START_TAG: str = None  # 用来区分从哪里开始解析,可以使用|添加多个条件
-    REGULAR_RULES_FOR_TITLES: list = []
+    MATCH_PAGE_HEADER = r"(第[\d]+页 共[\d]+页)|(目 次)"
+    MATCH_PARSE_START_TAG = r"(^前 言$)"  # 用来区分从哪里开始解析,可以使用|添加多个条件
 
-    def __init__(
-        self,
-        path,
-        regular_rules_for_titles,
-        match_page_header,
-        match_parse_start_tag=None,  # 如果这个提供，就先以这个分割文本，拿到内容
-    ) -> None:
-        self.REGULAR_RULES_FOR_TITLES = regular_rules_for_titles
-        self.MATCH_PAGE_HEADER = match_page_header
-        self.MATCH_PARSE_START_TAG = match_parse_start_tag
-
+    def __init__(self, path) -> None:
         self.raw_text = None
         self.text = None
         self.path = path
@@ -41,14 +30,13 @@ class ParseText:
             self.text = self.raw_text
 
     def get_match_title_levels_of_n(self, n):
-        # return r"(^[\d]+{} .+)".format(r"[.][\d]+" * (n - 1))
-        return self.REGULAR_RULES_FOR_TITLES[n - 1]
+        return r"(^[\d]+{} .+)".format(r"[.][\d]+" * (n - 1))
 
     def parseText(self):
         self.remove_blank()
         self.remove_page_header()
         self.remove_catalog()
-        self.debug()
+        # self.debug()
         self.content_tree = self.parse_text_recursion(self.text, "root", 1)
 
     def remove_blank(self):
@@ -68,30 +56,26 @@ class ParseText:
     def remove_catalog(self):
         # print(self.text)
         # print(re.search(self.MATCH_PARSE_START_TAG, self.text, re.M).group(1))
-        if self.MATCH_PARSE_START_TAG:
-            self.text = "".join(
-                re.split(self.MATCH_PARSE_START_TAG, self.text, 1, re.M)[1:]
-            )
-
-        self.text = self.text.strip()
+        self.text = "".join(
+            re.split(self.MATCH_PARSE_START_TAG, self.text, 1, re.M)[1:]
+        )
+        self.text = self.text.replace("前 言", "0 前言", 1)
 
     def parse_text_recursion(self, text, cur_title, level):
         tmp_tree: list | dict = None
         match_rule = self.get_match_title_levels_of_n(level)
-
-        sub_titles = re.findall(match_rule, text, re.M)
-        if not sub_titles:
-            return text
-
         if level == 1:
-            tmp = []
-            index = self.get_index(sub_titles[0])
-            for sub_title in sub_titles:
-                if index == self.get_index(sub_title):
-                    tmp.append(sub_title)
-                    index += 1
-            sub_titles = tmp
-
+            tmp = re.findall(match_rule, text, re.M)
+            # print(res)
+            sub_titles = []
+            for i in range(len(tmp)):
+                j = int(tmp[i].split(" ", 1)[0])
+                if i == j:
+                    sub_titles.append(tmp[i])
+        else:
+            sub_titles = re.findall(match_rule, text, re.M)
+            if not sub_titles:
+                return text
         print(f"level{level} - {cur_title}: {sub_titles}")
         title_content = self.split_text_by_title(text, sub_titles)
         if isinstance(title_content, list):
@@ -145,59 +129,10 @@ class ParseText:
 
     def debug(self):
         tmp = {"1": self.text}
-        # print(tmp)
+        print(tmp)
         with open("./tmp.txt", "w", encoding="utf-8") as f:
             f.write(self.text)
 
-    def get_index(self, text: str):
-        num = 0
-        for ch in text:
-            if ch.isdigit():
-                num = num * 10 + int(ch)
-            else:
-                break
-        return num
-
-
-# 用来匹配第N级标题
-# 为了提升程序的拓展性，采用用户可自定义方式，一般不会超过5级
-"""
-# test1
-regular_rules_for_titles = [
-    r"^[\d]+ [\u4e00-\u9fa5a-zA-Z0-9]+$|前 言",
-    r"(^[\d]+[.][\d]+ .+)",
-    r"(^[\d]+[.][\d]+[.][\d]+ .+)",
-    r"(^[\d]+[.][\d]+[.][\d]+[.][\d]+ .+)",
-    r"(^[\d]+[.][\d]+[.][\d]+[.][\d]+[.][\d]+ .+)",
-]
-match_page_header = r"(第[\d]+页 共[\d]+页)|(目 次)"
-match_parse_start_tag = None 
-match_parse_start_tag = r"(^前 言$)"
-"""
-""" 
-# test2
-regular_rules_for_titles = [
-    r"(^[0-9]+[.] .+$)",  # 汉字、字母、数字
-    r"(^[0-9]+[.][0-9]+ .+)",
-    r"(^[0-9]+[.][0-9]+[.][0-9]+ .+)",
-    r"(^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+ .+)",
-    r"(^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+[.][0-9]+ .+)",
-]
-match_page_header = r"([0-9]+ [|]页)"
-# match_parse_start_tag = None
-match_parse_start_tag = r"(^1. 总则$)" 
-"""
-# test3
-regular_rules_for_titles = [
-    r"(第.+章 .+)",  # 汉字、字母、数字
-    r"(^[0-9]+[.][0-9]+ .+)",
-    r"(^[0-9]+[.][0-9]+[.][0-9]+ .+)",
-    r"(^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+ .+)",
-    r"(^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+[.][0-9]+ .+)",
-]
-match_page_header = r"(-[\d]+-)"
-# match_parse_start_tag = None
-match_parse_start_tag = r"(^第一章 智慧教育技术的发展背景$)"
 
 if __name__ == "__main__":
     root_dir = "./pdf_out"
@@ -205,23 +140,18 @@ if __name__ == "__main__":
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
-    # file_name = "test1_pdfplumber_without_catalog.txt"
-    # file_name = "test1_pdfplumber.txt"
-    # file_name = "test2_pdfplumber_without_catalog.txt"
-    # file_name = "test2_pdfplumber.txt"
-    file_name = "test3_pdfplumber.txt"
+    file_name = "test1_pdfplumber.txt"
 
-    # print(regular_rules_for_titles)
-
-    app = ParseText(
-        os.path.join(root_dir, file_name),
-        regular_rules_for_titles,
-        match_page_header,
-        match_parse_start_tag,
-    )
-    # for i in range(1, 10):
-    #     print(f"'{app.get_match_title_levels_of_n(i)}',")
+    app = ParseText(os.path.join(root_dir, file_name))
     app.parseText()
     app.save_content_tree(
         os.path.join(out_dir, f"{file_name.removesuffix('.txt')}.json")
     )
+
+    # text = "3.1 维修性 maintainability\n产品在规定的条件下和规定的时间内，按规定的程序和方法进行维修时，保持或恢复到规\n定状态的能力。"
+    # print(text)
+    # print(text.split("\n", 1)[1])
+    # data = json.load(open("./pdf_parse/test1_pdfminer.json"))
+    # text = data["3 术语和定义"]["3.1 维修性 maintainability"]
+    # print(text)
+    # print(text.split("\n", 1)[1])
